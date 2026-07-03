@@ -1,4 +1,4 @@
-export const artworkAllowedEmailDomains = ["oasisoutsourcing.co.ke", "solvoglobal.com"];
+export const artworkAllowedEmailDomains = ["oasisoutsourcing.co.ke", "solvoglobal.com", "weareawsm.africa"];
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
