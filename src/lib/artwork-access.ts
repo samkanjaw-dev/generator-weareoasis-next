@@ -22,7 +22,10 @@ export function isArtworkBrowserAuthConfigured() {
 }
 
 export function isArtworkServerAuthConfigured() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
 }
 
 export function isLocalArtworkHost(hostname: string | null | undefined) {
