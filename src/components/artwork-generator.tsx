@@ -17,16 +17,18 @@ type LogoAsset = {
   src: string | null;
 };
 
+type LibraryImage = {
+  name: string;
+  src: string;
+  size: number;
+  updatedAt: number;
+};
+
 type FolderLibraryResponse = {
   ok: boolean;
   error?: string;
   count?: number;
-  images?: Array<{
-    name: string;
-    src: string;
-    size: number;
-    updatedAt: number;
-  }>;
+  images?: LibraryImage[];
 };
 
 type ArtworkTemplateResponse = {
@@ -957,6 +959,28 @@ async function fetchProtectedImageObjectUrl(src: string, accessToken: string | n
   return URL.createObjectURL(blob);
 }
 
+async function fetchProtectedImageDataUrl(src: string, accessToken: string | null | undefined) {
+  const response = await fetch(src, {
+    cache: "no-store",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined
+  });
+
+  if (!response.ok) {
+    throw new Error("The selected image could not be loaded.");
+  }
+
+  const blob = await response.blob();
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("The selected image could not be prepared."));
+    });
+    reader.addEventListener("error", () => reject(new Error("The selected image could not be prepared.")));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function sampleCellMetrics(
   data: Uint8ClampedArray,
   imageWidth: number,
@@ -1879,6 +1903,9 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
   const hasAutoLoadedLibraryRef = useRef(false);
   const [portraitSrc, setPortraitSrc] = useState<string | null>(null);
   const [tiles, setTiles] = useState<MosaicTile[]>([]);
+  const [libraryImages, setLibraryImages] = useState<LibraryImage[]>([]);
+  const [selectedLibraryPortrait, setSelectedLibraryPortrait] = useState("");
+  const [loadingLibraryPortrait, setLoadingLibraryPortrait] = useState(false);
   const [copy, setCopy] = useState<ArtworkCopy>(defaultCopy);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("local");
   const [location, setLocation] = useState("Medellin");
@@ -2092,6 +2119,7 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
       const keepsTransparency = file.type === "image/png" || file.type === "image/webp";
       const src = await compressImage(file, 1900, 0.92, keepsTransparency);
       setPortraitSrc(src);
+      setSelectedLibraryPortrait("");
       setStatus("Ready");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Portrait could not be prepared");
@@ -2146,9 +2174,11 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
       }
 
       const images = payload.images ?? [];
+      setLibraryImages(images);
 
       if (!images.length) {
         setTiles([]);
+        setSelectedLibraryPortrait("");
         setStatus("People library is empty");
         return;
       }
@@ -2183,11 +2213,35 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
       }
 
       setTiles(preparedTiles);
+      setSelectedLibraryPortrait((current) => current || images[0]?.name || "");
       setStatus(`${preparedTiles.length} people loaded`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The people library could not be loaded");
     } finally {
       setProcessingTiles(false);
+    }
+  }
+
+  async function handleUseLibraryPortrait(imageName = selectedLibraryPortrait) {
+    const image = libraryImages.find((item) => item.name === imageName);
+
+    if (!image) {
+      setStatus("Choose a person photo first");
+      return;
+    }
+
+    setLoadingLibraryPortrait(true);
+    setStatus("Preparing selected photo");
+
+    try {
+      const src = await fetchProtectedImageDataUrl(image.src, accessToken);
+      setPortraitSrc(src);
+      setSelectedLibraryPortrait(image.name);
+      setStatus(`Selected ${image.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The selected photo could not be prepared");
+    } finally {
+      setLoadingLibraryPortrait(false);
     }
   }
 
@@ -2401,7 +2455,7 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
           <form className="mosaic-controls" onSubmit={(event) => event.preventDefault()}>
             <section className="mosaic-section">
               <div className="mosaic-section-head">
-                <h2>1. Upload your photo</h2>
+                <h2>1. Pick your photo</h2>
                 <span>{tiles.length} people loaded</span>
               </div>
 
@@ -2419,9 +2473,36 @@ export function ArtworkGenerator({ accessToken = null, layoutEditorAllowed = fal
                   {processingTiles ? "Loading people..." : "Refresh people library"}
                 </button>
               </div>
+
+              {libraryImages.length > 0 ? (
+                <div className="mosaic-two-fields">
+                  <label className="mosaic-field">
+                    <span>Choose from library</span>
+                    <select
+                      value={selectedLibraryPortrait}
+                      onChange={(event) => setSelectedLibraryPortrait(event.target.value)}
+                    >
+                      {libraryImages.map((image) => (
+                        <option key={image.name} value={image.name}>
+                          {image.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="mosaic-upload-button"
+                    onClick={() => void handleUseLibraryPortrait()}
+                    disabled={processingTiles || loadingLibraryPortrait || !selectedLibraryPortrait}
+                  >
+                    {loadingLibraryPortrait ? "Preparing..." : "Use selected photo"}
+                  </button>
+                </div>
+              ) : null}
+
               <p className="mosaic-folder-note">
-                The collage uses the shared people photos in <strong>artwork-library</strong>.
-                Add new photos there, then refresh.
+                Pick your main portrait from the shared library, or upload a new photo. The mosaic uses the people photos
+                in <strong>artwork-library</strong>.
               </p>
 
               <div className="mosaic-brand-lock">
