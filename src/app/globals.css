@@ -3207,7 +3207,8 @@ th {
 }
 
 .mosaic-field input,
-.mosaic-field textarea {
+.mosaic-field textarea,
+.mosaic-field select {
   width: 100%;
   border: 1px solid var(--mosaic-line);
   border-radius: 8px;
@@ -3216,7 +3217,8 @@ th {
   font: inherit;
 }
 
-.mosaic-field input {
+.mosaic-field input,
+.mosaic-field select {
   min-height: 42px;
   padding: 0 11px;
 }
@@ -3228,6 +3230,7 @@ th {
 
 .mosaic-field input:focus,
 .mosaic-field textarea:focus,
+.mosaic-field select:focus,
 .mosaic-range input:focus {
   outline: 2px solid rgba(0, 92, 230, 0.22);
   outline-offset: 2px;
