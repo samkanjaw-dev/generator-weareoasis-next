@@ -1,44 +1,76 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
-import path from "node:path";
-
 import { NextResponse } from "next/server";
 
-import { requireArtworkApiAccess } from "@/lib/artwork-api-auth";
-import { artworkLibraryPath, isSupportedArtworkImage } from "@/lib/artwork-library";
+import { isSupportedArtworkImage } from "@/lib/artwork-library";
+import { getAdminClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(request: Request) {
-  const access = await requireArtworkApiAccess(request);
-  if (access.response) {
-    return access.response;
+const bucketName = "artwork-library";
+
+type LibraryImage = {
+  name: string;
+  src: string;
+  size: number;
+  updatedAt: number;
+};
+
+async function listStorageImages(folder = ""): Promise<LibraryImage[]> {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase.storage.from(bucketName).list(folder, {
+    limit: 1000,
+    sortBy: { column: "name", order: "asc" }
+  });
+
+  if (error) {
+    throw error;
   }
 
-  await mkdir(artworkLibraryPath, { recursive: true });
+  const images: LibraryImage[] = [];
 
-  const entries = await readdir(artworkLibraryPath, { withFileTypes: true });
-  const files = await Promise.all(
-    entries
-      .filter((entry) => entry.isFile() && isSupportedArtworkImage(entry.name))
-      .map(async (entry) => {
-        const fileStats = await stat(path.join(artworkLibraryPath, entry.name));
+  for (const item of data ?? []) {
+    const itemPath = folder ? `${folder}/${item.name}` : item.name;
 
-        return {
-          name: entry.name,
-          size: fileStats.size,
-          updatedAt: fileStats.mtimeMs,
-          src: `/api/artwork-library/images/${encodeURIComponent(entry.name)}?v=${Math.round(fileStats.mtimeMs)}`
-        };
-      })
-  );
+    if (item.id === null) {
+      images.push(...(await listStorageImages(itemPath)));
+      continue;
+    }
 
-  files.sort((left, right) => left.name.localeCompare(right.name));
+    if (!isSupportedArtworkImage(item.name)) {
+      continue;
+    }
 
-  return NextResponse.json({
-    ok: true,
-    folder: "artwork-library",
-    count: files.length,
-    images: files
-  });
+    const updatedAt = item.updated_at ? new Date(item.updated_at).getTime() : Date.now();
+
+    images.push({
+      name: itemPath,
+      size: item.metadata?.size ?? 0,
+      updatedAt,
+      src: `/api/artwork-library/images?path=${encodeURIComponent(itemPath)}&v=${Math.round(updatedAt)}`
+    });
+  }
+
+  return images;
+}
+
+export async function GET() {
+  try {
+    const images = await listStorageImages();
+    images.sort((left, right) => left.name.localeCompare(right.name));
+
+    return NextResponse.json({
+      ok: true,
+      folder: bucketName,
+      count: images.length,
+      images
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : "The artwork library could not be loaded."
+      },
+      { status: 500 }
+    );
+  }
 }
