@@ -71,6 +71,14 @@ export function ArtworkAuthGate({ children }: ArtworkAuthGateProps) {
 
     const supabase = getSupabaseBrowserClient();
     let active = true;
+    const loadingTimeout = window.setTimeout(() => {
+      if (!active) {
+        return;
+      }
+
+      setError("Login check took too long. Try logging in again, or refresh the page.");
+      setLoading(false);
+    }, 8000);
 
     const applySession = async (nextUser: User | null, nextAccessToken: string | null) => {
       const nextEmail = nextUser?.email ?? null;
@@ -92,21 +100,35 @@ export function ArtworkAuthGate({ children }: ArtworkAuthGateProps) {
       setAccessToken(nextAccessToken);
     };
 
-    void supabase.auth.getSession().then(async ({ data, error: sessionError }) => {
-      if (!active) {
-        return;
-      }
+    void supabase.auth
+      .getSession()
+      .then(async ({ data, error: sessionError }) => {
+        if (!active) {
+          return;
+        }
 
-      if (sessionError) {
-        setError(sessionError.message);
-      }
+        if (sessionError) {
+          setError(sessionError.message);
+        }
 
-      await applySession(data.session?.user ?? null, data.session?.access_token ?? null);
+        await applySession(data.session?.user ?? null, data.session?.access_token ?? null);
+      })
+      .catch((sessionError: unknown) => {
+        if (!active) {
+          return;
+        }
 
-      if (active) {
-        setLoading(false);
-      }
-    });
+        setUser(null);
+        setAccessToken(null);
+        setError(sessionError instanceof Error ? sessionError.message : "Could not check your login. Try again.");
+      })
+      .finally(() => {
+        window.clearTimeout(loadingTimeout);
+
+        if (active) {
+          setLoading(false);
+        }
+      });
 
     const {
       data: { subscription }
@@ -120,6 +142,7 @@ export function ArtworkAuthGate({ children }: ArtworkAuthGateProps) {
 
     return () => {
       active = false;
+      window.clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
   }, []);
