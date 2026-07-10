@@ -128,10 +128,10 @@ const legacyEditorStorageKey = "oasis-solvo-artwork-template-layouts-v2";
 const editorStorageKey = "oasis-solvo-artwork-template-v6";
 
 const defaultTemplateStyle: ArtworkTemplateStyle = {
-  tileSize: 48,
-  clarity: 66,
-  backgroundClarity: 92,
-  backgroundWash: 42,
+  tileSize: 44,
+  clarity: 48,
+  backgroundClarity: 100,
+  backgroundWash: 24,
   bottomBarEnabled: true,
   bottomBarColor: "#071d65",
   bottomBarHeight: 72,
@@ -1723,7 +1723,7 @@ async function renderArtwork({
 
         const seamlessUnderlay = 190 * scale;
         context.save();
-        context.globalAlpha = 0.42;
+        context.globalAlpha = 0.58;
         context.drawImage(
           fieldCanvas,
           portraitX - seamlessUnderlay,
@@ -1753,28 +1753,28 @@ async function renderArtwork({
         );
 
         context.save();
-        context.globalAlpha = 0.9;
+        context.globalAlpha = 0.66;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.44;
+        context.globalAlpha = 0.78;
         context.drawImage(subjectMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.62;
+        context.globalAlpha = 0.68;
         context.drawImage(featureMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
         context.globalCompositeOperation = "multiply";
-        context.globalAlpha = 0.22;
+        context.globalAlpha = 0.34;
         context.drawImage(subjectMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = clamp(templateStyle.clarity / 100 - 0.02, 0.58, 0.76);
+        context.globalAlpha = clamp(templateStyle.clarity / 100 - 0.06, 0.34, 0.56);
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
@@ -1795,7 +1795,7 @@ async function renderArtwork({
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.16;
+        context.globalAlpha = 0.28;
         context.drawImage(featureMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
       } else {
