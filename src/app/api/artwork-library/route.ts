@@ -46,7 +46,7 @@ async function listStorageImages(folder = ""): Promise<LibraryImage[]> {
       name: itemPath,
       size: item.metadata?.size ?? 0,
       updatedAt,
-      src: `/api/artwork-library/images?path=${encodeURIComponent(itemPath)}&v=${Math.round(updatedAt)}`
+      src: `/api/artwork-library/images/${encodeURIComponent(itemPath)}?v=${Math.round(updatedAt)}`
     });
   }
 
