@@ -1060,8 +1060,8 @@ function ellipseWeight(x: number, y: number, centerX: number, centerY: number, r
 
 function faceProtectionWeight(x: number, y: number) {
   return Math.max(
-    ellipseWeight(x, y, 0.52, 0.245, 0.24, 0.18),
-    ellipseWeight(x, y, 0.52, 0.31, 0.18, 0.12) * 0.55
+    ellipseWeight(x, y, 0.52, 0.255, 0.26, 0.2),
+    ellipseWeight(x, y, 0.52, 0.33, 0.2, 0.14) * 0.62
   );
 }
 
@@ -1069,7 +1069,7 @@ function tileReadabilityWeight(x: number, y: number, subject: number) {
   const faceProtection = faceProtectionWeight(x, y);
   const bodyWeight = clamp((y - 0.34) / 0.34, 0, 1);
   const sideWeight = clamp((Math.abs(x - 0.52) - 0.18) / 0.24, 0, 1) * clamp((y - 0.18) / 0.54, 0, 1);
-  const faceWeight = faceProtection * 0.32;
+  const faceWeight = faceProtection * 0.08;
 
   return clamp(Math.max(bodyWeight, sideWeight, faceWeight) * clamp(subject * 1.35, 0, 1), 0, 1);
 }
@@ -1632,20 +1632,21 @@ async function renderArtwork({
             fieldContext.restore();
 
             if (subjectMetrics.subject > 0.025) {
+              const faceSafeOpacity = 1 - faceProtection * 0.62;
               subjectMosaicContext.save();
               subjectMosaicContext.beginPath();
               subjectMosaicContext.rect(x, y, cellWidth, cellHeight);
               subjectMosaicContext.clip();
               subjectMosaicContext.globalAlpha = clamp(
-                0.7 + subjectStrength * 0.12 + readability * 0.12 - faceProtection * 0.16,
-                0.42,
-                0.88
+                0.42 + subjectStrength * 0.08 + readability * 0.1 - faceProtection * 0.34,
+                0.16,
+                0.58
               );
               drawImageCover(subjectMosaicContext, tile.image, x, y, cellWidth, cellHeight);
               subjectMosaicContext.globalAlpha = clamp(0.025 + presence * 0.045 - readability * 0.015, 0.015, 0.075);
               subjectMosaicContext.fillStyle = `rgb(${Math.round(avg[0])}, ${Math.round(avg[1])}, ${Math.round(avg[2])})`;
               subjectMosaicContext.fillRect(x, y, cellWidth, cellHeight);
-              subjectMosaicContext.globalAlpha = 0.055 + subjectStrength * 0.065 + readability * 0.09;
+              subjectMosaicContext.globalAlpha = (0.045 + subjectStrength * 0.05 + readability * 0.065) * faceSafeOpacity;
               subjectMosaicContext.strokeStyle = "#ffffff";
               subjectMosaicContext.lineWidth = 1 * scale;
               subjectMosaicContext.strokeRect(x + 0.5 * scale, y + 0.5 * scale, cellWidth, cellHeight);
@@ -1674,8 +1675,9 @@ async function renderArtwork({
               "alpha"
             );
             const readability = tileReadabilityWeight(normalX, normalY, subjectMetrics.subject);
+            const faceProtection = faceProtectionWeight(normalX, normalY);
 
-            if (readability < 0.18) {
+            if (readability < 0.18 || faceProtection > 0.42) {
               cellIndex += 1;
               continue;
             }
@@ -1696,7 +1698,7 @@ async function renderArtwork({
             featureMosaicContext.beginPath();
             featureMosaicContext.rect(x, y, cellWidth, cellHeight);
             featureMosaicContext.clip();
-            featureMosaicContext.globalAlpha = 0.22 + readability * 0.22;
+            featureMosaicContext.globalAlpha = clamp(0.16 + readability * 0.16 - faceProtection * 0.18, 0.08, 0.34);
             drawImageCover(featureMosaicContext, tile.image, x, y, cellWidth, cellHeight);
             featureMosaicContext.globalAlpha = 0.02 + cellPresence(avg) * 0.025;
             featureMosaicContext.fillStyle = `rgb(${Math.round(avg[0])}, ${Math.round(avg[1])}, ${Math.round(avg[2])})`;
@@ -1753,28 +1755,28 @@ async function renderArtwork({
         );
 
         context.save();
-        context.globalAlpha = 0.84;
+        context.globalAlpha = 0.88;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.5;
+        context.globalAlpha = 0.32;
         context.drawImage(subjectMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.44;
+        context.globalAlpha = 0.28;
         context.drawImage(featureMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
         context.globalCompositeOperation = "multiply";
-        context.globalAlpha = 0.2;
+        context.globalAlpha = 0.12;
         context.drawImage(subjectMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = clamp(templateStyle.clarity / 100 - 0.03, 0.58, 0.74);
+        context.globalAlpha = clamp(templateStyle.clarity / 100, 0.66, 0.82);
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
@@ -1790,12 +1792,12 @@ async function renderArtwork({
           Math.PI * 2
         );
         context.clip();
-        context.globalAlpha = 0.34;
+        context.globalAlpha = 0.42;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
         context.save();
-        context.globalAlpha = 0.12;
+        context.globalAlpha = 0.08;
         context.drawImage(featureMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
       } else {
