@@ -618,22 +618,14 @@ function sampleBackgroundColor(data: Uint8ClampedArray, width: number, height: n
   return [red / count, green / count, blue / count];
 }
 
-function ellipseWeight(x: number, y: number, centerX: number, centerY: number, radiusX: number, radiusY: number) {
-  const normalized =
-    ((x - centerX) * (x - centerX)) / (radiusX * radiusX) +
-    ((y - centerY) * (y - centerY)) / (radiusY * radiusY);
-
-  return clamp(1 - normalized, 0, 1);
-}
-
 function portraitSubjectPriorWeight(x: number, y: number, width: number, height: number) {
   const normalX = x / width;
   const normalY = y / height;
   const head = ellipseWeight(normalX, normalY, 0.52, 0.27, 0.27, 0.23);
   const upperBody = ellipseWeight(normalX, normalY, 0.52, 0.58, 0.45, 0.38);
-  const lowerBody = ellipseWeight(normalX, normalY, 0.52, 0.84, 0.56, 0.42);
+  const lowerBody = ellipseWeight(normalX, normalY, 0.52, 0.83, 0.5, 0.36);
 
-  return Math.max(head, upperBody * 0.96, lowerBody * 0.88);
+  return Math.max(head, upperBody * 0.92, lowerBody * 0.72);
 }
 
 function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
@@ -687,12 +679,9 @@ function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
         alpha > 18 &&
         luminance < 246 &&
         (distance > 18 || spread > 10 || luminance < 238);
-      const likelyDarkGarment = subjectPrior > 0.2 && alpha > 18 && luminance < 132;
 
       backgroundCandidate[pixel] =
-        !likelyLightSubject && !likelyDarkGarment && (alpha < 18 || distance < backgroundThreshold || plainBackdrop)
-          ? 1
-          : 0;
+        !likelyLightSubject && (alpha < 18 || distance < backgroundThreshold || plainBackdrop) ? 1 : 0;
     }
 
     const visited = new Uint8Array(pixelCount);
@@ -1135,6 +1124,14 @@ function cellPresence([red, green, blue]: RGB) {
   return clamp(darkPresence + colorPresence, 0, 1);
 }
 
+function ellipseWeight(x: number, y: number, centerX: number, centerY: number, radiusX: number, radiusY: number) {
+  const normalized =
+    ((x - centerX) * (x - centerX)) / (radiusX * radiusX) +
+    ((y - centerY) * (y - centerY)) / (radiusY * radiusY);
+
+  return clamp(1 - normalized, 0, 1);
+}
+
 function faceProtectionWeight(x: number, y: number) {
   return Math.max(
     ellipseWeight(x, y, 0.52, 0.255, 0.26, 0.2),
@@ -1149,14 +1146,6 @@ function tileReadabilityWeight(x: number, y: number, subject: number) {
   const faceWeight = faceProtection * 0.08;
 
   return clamp(Math.max(bodyWeight, sideWeight, faceWeight) * clamp(subject * 1.35, 0, 1), 0, 1);
-}
-
-function subjectProtectionWeight(x: number, y: number, subject: number) {
-  const torso = ellipseWeight(x, y, 0.52, 0.58, 0.45, 0.38);
-  const lowerBody = ellipseWeight(x, y, 0.52, 0.84, 0.56, 0.42);
-  const lowerPriority = clamp((y - 0.52) / 0.3, 0, 1);
-
-  return clamp(Math.max(torso * 0.36, lowerBody * (0.48 + lowerPriority * 0.32)) * clamp(subject * 1.4, 0, 1), 0, 1);
 }
 
 function seededIndex(seed: number, cellIndex: number, limit: number) {
@@ -1698,7 +1687,6 @@ async function renderArtwork({
             const subjectStrength = Math.pow(subjectMetrics.subject, 0.44);
             const faceProtection = faceProtectionWeight(normalX, normalY);
             const readability = tileReadabilityWeight(normalX, normalY, subjectMetrics.subject);
-            const subjectProtection = subjectProtectionWeight(normalX, normalY, subjectMetrics.subject);
 
             fieldContext.save();
             fieldContext.beginPath();
@@ -1724,8 +1712,8 @@ async function renderArtwork({
               subjectMosaicContext.rect(x, y, cellWidth, cellHeight);
               subjectMosaicContext.clip();
               subjectMosaicContext.globalAlpha = clamp(
-                0.42 + subjectStrength * 0.08 + readability * 0.1 - faceProtection * 0.34 - subjectProtection * 0.18,
-                0.1,
+                0.42 + subjectStrength * 0.08 + readability * 0.1 - faceProtection * 0.34,
+                0.16,
                 0.58
               );
               drawImageCover(subjectMosaicContext, tile.image, x, y, cellWidth, cellHeight);
@@ -1762,7 +1750,6 @@ async function renderArtwork({
             );
             const readability = tileReadabilityWeight(normalX, normalY, subjectMetrics.subject);
             const faceProtection = faceProtectionWeight(normalX, normalY);
-            const subjectProtection = subjectProtectionWeight(normalX, normalY, subjectMetrics.subject);
 
             if (readability < 0.18 || faceProtection > 0.42) {
               cellIndex += 1;
@@ -1785,11 +1772,7 @@ async function renderArtwork({
             featureMosaicContext.beginPath();
             featureMosaicContext.rect(x, y, cellWidth, cellHeight);
             featureMosaicContext.clip();
-            featureMosaicContext.globalAlpha = clamp(
-              0.16 + readability * 0.16 - faceProtection * 0.18 - subjectProtection * 0.12,
-              0.04,
-              0.34
-            );
+            featureMosaicContext.globalAlpha = clamp(0.16 + readability * 0.16 - faceProtection * 0.18, 0.08, 0.34);
             drawImageCover(featureMosaicContext, tile.image, x, y, cellWidth, cellHeight);
             featureMosaicContext.globalAlpha = 0.02 + cellPresence(avg) * 0.025;
             featureMosaicContext.fillStyle = `rgb(${Math.round(avg[0])}, ${Math.round(avg[1])}, ${Math.round(avg[2])})`;
@@ -1868,22 +1851,6 @@ async function renderArtwork({
 
         context.save();
         context.globalAlpha = clamp(templateStyle.clarity / 100, 0.66, 0.82);
-        context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
-        context.restore();
-
-        context.save();
-        context.beginPath();
-        context.ellipse(
-          portraitX + portraitWidth * 0.52,
-          portraitY + portraitHeight * 0.72,
-          portraitWidth * 0.44,
-          portraitHeight * 0.36,
-          0,
-          0,
-          Math.PI * 2
-        );
-        context.clip();
-        context.globalAlpha = 0.26;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
