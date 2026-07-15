@@ -618,6 +618,16 @@ function sampleBackgroundColor(data: Uint8ClampedArray, width: number, height: n
   return [red / count, green / count, blue / count];
 }
 
+function portraitSubjectPriorWeight(x: number, y: number, width: number, height: number) {
+  const normalX = x / width;
+  const normalY = y / height;
+  const head = ellipseWeight(normalX, normalY, 0.52, 0.27, 0.27, 0.23);
+  const upperBody = ellipseWeight(normalX, normalY, 0.52, 0.58, 0.45, 0.38);
+  const lowerBody = ellipseWeight(normalX, normalY, 0.52, 0.83, 0.5, 0.36);
+
+  return Math.max(head, upperBody * 0.92, lowerBody * 0.72);
+}
+
 function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
   const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
 
@@ -663,8 +673,15 @@ function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
       const distance = Math.sqrt(colorDistance([red, green, blue], background));
       const brightNeutral = luminance > 202 && spread < 54;
       const plainBackdrop = backgroundLuminance > 188 && backgroundSpread < 54 && brightNeutral && distance < 96;
+      const subjectPrior = portraitSubjectPriorWeight(pixel % width, Math.floor(pixel / width), width, height);
+      const likelyLightSubject =
+        subjectPrior > 0.34 &&
+        alpha > 18 &&
+        luminance < 246 &&
+        (distance > 18 || spread > 10 || luminance < 238);
 
-      backgroundCandidate[pixel] = alpha < 18 || distance < backgroundThreshold || plainBackdrop ? 1 : 0;
+      backgroundCandidate[pixel] =
+        !likelyLightSubject && (alpha < 18 || distance < backgroundThreshold || plainBackdrop) ? 1 : 0;
     }
 
     const visited = new Uint8Array(pixelCount);
@@ -738,6 +755,63 @@ function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
 
   cutoutContext.putImageData(new ImageData(cutoutData, width, height), 0, 0);
   return cutoutCanvas;
+}
+
+function normalizeSubjectReadabilityCanvas(sourceCanvas: HTMLCanvasElement) {
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+
+  if (!sourceContext) {
+    return sourceCanvas;
+  }
+
+  const width = sourceCanvas.width;
+  const height = sourceCanvas.height;
+  const imageData = sourceContext.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const navy: RGB = [7, 29, 101];
+
+  for (let y = 0; y < height; y += 1) {
+    const normalY = y / height;
+    const bodyWeight = clamp((normalY - 0.32) / 0.46, 0, 1);
+
+    if (bodyWeight <= 0) {
+      continue;
+    }
+
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const alpha = data[index + 3] / 255;
+
+      if (alpha < 0.08) {
+        continue;
+      }
+
+      const luminance = pixelLuminance(data[index], data[index + 1], data[index + 2]);
+      const lightSubjectWeight = clamp((luminance - 176) / 72, 0, 1);
+      const edgeWeight = portraitSubjectPriorWeight(x, y, width, height);
+      const toneAmount = bodyWeight * lightSubjectWeight * edgeWeight * 0.12;
+
+      if (toneAmount <= 0) {
+        continue;
+      }
+
+      data[index] = Math.round(data[index] * (1 - toneAmount) + navy[0] * toneAmount);
+      data[index + 1] = Math.round(data[index + 1] * (1 - toneAmount) + navy[1] * toneAmount);
+      data[index + 2] = Math.round(data[index + 2] * (1 - toneAmount) + navy[2] * toneAmount);
+    }
+  }
+
+  const normalizedCanvas = document.createElement("canvas");
+  normalizedCanvas.width = width;
+  normalizedCanvas.height = height;
+  const normalizedContext = normalizedCanvas.getContext("2d");
+
+  if (!normalizedContext) {
+    return sourceCanvas;
+  }
+
+  normalizedContext.putImageData(imageData, 0, 0);
+  return normalizedCanvas;
 }
 
 function getReadableTileCrop(sourceImage: HTMLImageElement) {
@@ -1549,7 +1623,7 @@ async function renderArtwork({
 
   if (portraitImage && portraitContext) {
     const portraitData = portraitContext.getImageData(0, 0, portraitCanvas.width, portraitCanvas.height).data;
-    const subjectCanvas = buildSubjectCutoutCanvas(portraitCanvas);
+    const subjectCanvas = normalizeSubjectReadabilityCanvas(buildSubjectCutoutCanvas(portraitCanvas));
     const subjectContext = subjectCanvas.getContext("2d", { willReadFrequently: true });
     const subjectData = subjectContext
       ? subjectContext.getImageData(0, 0, subjectCanvas.width, subjectCanvas.height).data
