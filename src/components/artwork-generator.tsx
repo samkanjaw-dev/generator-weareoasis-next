@@ -618,6 +618,14 @@ function sampleBackgroundColor(data: Uint8ClampedArray, width: number, height: n
   return [red / count, green / count, blue / count];
 }
 
+function ellipseWeight(x: number, y: number, centerX: number, centerY: number, radiusX: number, radiusY: number) {
+  const normalized =
+    ((x - centerX) * (x - centerX)) / (radiusX * radiusX) +
+    ((y - centerY) * (y - centerY)) / (radiusY * radiusY);
+
+  return clamp(1 - normalized, 0, 1);
+}
+
 function portraitSubjectPriorWeight(x: number, y: number, width: number, height: number) {
   const normalX = x / width;
   const normalY = y / height;
@@ -1125,14 +1133,6 @@ function cellPresence([red, green, blue]: RGB) {
   const colorPresence = clamp(spread / 95, 0, 0.34);
 
   return clamp(darkPresence + colorPresence, 0, 1);
-}
-
-function ellipseWeight(x: number, y: number, centerX: number, centerY: number, radiusX: number, radiusY: number) {
-  const normalized =
-    ((x - centerX) * (x - centerX)) / (radiusX * radiusX) +
-    ((y - centerY) * (y - centerY)) / (radiusY * radiusY);
-
-  return clamp(1 - normalized, 0, 1);
 }
 
 function faceProtectionWeight(x: number, y: number) {
