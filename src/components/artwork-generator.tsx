@@ -682,11 +682,18 @@ function buildSubjectCutoutCanvas(sourceCanvas: HTMLCanvasElement) {
       const brightNeutral = luminance > 202 && spread < 54;
       const plainBackdrop = backgroundLuminance > 188 && backgroundSpread < 54 && brightNeutral && distance < 96;
       const subjectPrior = portraitSubjectPriorWeight(pixel % width, Math.floor(pixel / width), width, height);
+      const smoothLightBackdrop =
+        backgroundLuminance > 188 &&
+        backgroundSpread < 54 &&
+        luminance > 214 &&
+        spread < 18 &&
+        distance < 58;
       const likelyLightSubject =
         subjectPrior > 0.34 &&
         alpha > 18 &&
         luminance < 246 &&
-        (distance > 18 || spread > 10 || luminance < 238);
+        !smoothLightBackdrop &&
+        (distance > 34 || spread > 18 || luminance < 226);
       const likelyDarkGarment = subjectPrior > 0.2 && alpha > 18 && luminance < 132;
 
       backgroundCandidate[pixel] =
@@ -1883,7 +1890,7 @@ async function renderArtwork({
           Math.PI * 2
         );
         context.clip();
-        context.globalAlpha = 0.26;
+        context.globalAlpha = 0.18;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
 
