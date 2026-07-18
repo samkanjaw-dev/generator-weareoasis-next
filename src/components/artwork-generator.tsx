@@ -814,6 +814,80 @@ function normalizeSubjectReadabilityCanvas(sourceCanvas: HTMLCanvasElement) {
   return normalizedCanvas;
 }
 
+function buildExpandedSubjectSilhouette(
+  sourceCanvas: HTMLCanvasElement,
+  radius: number,
+  color: string
+) {
+  const silhouetteCanvas = document.createElement("canvas");
+  silhouetteCanvas.width = sourceCanvas.width;
+  silhouetteCanvas.height = sourceCanvas.height;
+  const silhouetteContext = silhouetteCanvas.getContext("2d");
+
+  if (!silhouetteContext) {
+    return null;
+  }
+
+  const steps = Math.max(24, Math.ceil(radius * 6));
+  for (let step = 0; step < steps; step += 1) {
+    const angle = (step / steps) * Math.PI * 2;
+    silhouetteContext.drawImage(sourceCanvas, Math.cos(angle) * radius, Math.sin(angle) * radius);
+  }
+  silhouetteContext.drawImage(sourceCanvas, 0, 0);
+  silhouetteContext.globalCompositeOperation = "source-in";
+  silhouetteContext.fillStyle = color;
+  silhouetteContext.fillRect(0, 0, silhouetteCanvas.width, silhouetteCanvas.height);
+
+  return silhouetteCanvas;
+}
+
+function buildSubjectOutlineCanvas(
+  sourceCanvas: HTMLCanvasElement,
+  sourceData: Uint8ClampedArray,
+  scale: number
+) {
+  let visibleSamples = 0;
+  let totalSamples = 0;
+
+  for (let index = 3; index < sourceData.length; index += 16) {
+    visibleSamples += sourceData[index] > 24 ? 1 : 0;
+    totalSamples += 1;
+  }
+
+  const visibleCoverage = totalSamples ? visibleSamples / totalSamples : 1;
+  if (visibleCoverage < 0.08 || visibleCoverage > 0.94) {
+    return null;
+  }
+
+  const outerSilhouette = buildExpandedSubjectSilhouette(
+    sourceCanvas,
+    Math.max(3, 8 * scale),
+    "rgba(7,29,101,0.58)"
+  );
+  const innerSilhouette = buildExpandedSubjectSilhouette(
+    sourceCanvas,
+    Math.max(2, 6 * scale),
+    "rgba(255,255,255,0.98)"
+  );
+
+  if (!outerSilhouette || !innerSilhouette) {
+    return null;
+  }
+
+  const outlineCanvas = document.createElement("canvas");
+  outlineCanvas.width = sourceCanvas.width;
+  outlineCanvas.height = sourceCanvas.height;
+  const outlineContext = outlineCanvas.getContext("2d");
+
+  if (!outlineContext) {
+    return null;
+  }
+
+  outlineContext.drawImage(outerSilhouette, 0, 0);
+  outlineContext.drawImage(innerSilhouette, 0, 0);
+  return outlineCanvas;
+}
+
 function getReadableTileCrop(sourceImage: HTMLImageElement) {
   const sourceWidth = sourceImage.naturalWidth || sourceImage.width;
   const sourceHeight = sourceImage.naturalHeight || sourceImage.height;
@@ -1628,6 +1702,17 @@ async function renderArtwork({
     const subjectData = subjectContext
       ? subjectContext.getImageData(0, 0, subjectCanvas.width, subjectCanvas.height).data
       : portraitData;
+    const subjectOutlineCanvas = buildSubjectOutlineCanvas(subjectCanvas, subjectData, scale);
+    const drawSubjectOutline = () => {
+      if (!subjectOutlineCanvas) {
+        return;
+      }
+
+      context.save();
+      context.globalAlpha = 1;
+      context.drawImage(subjectOutlineCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
+      context.restore();
+    };
     const cell = clamp(templateStyle.tileSize * scale, 28 * scale, 76 * scale);
     const backgroundAlpha = clamp(templateStyle.backgroundClarity / 100, 0.35, 1);
     const backgroundBoostAlpha = 0.21 * (backgroundAlpha / 0.92);
@@ -1828,6 +1913,8 @@ async function renderArtwork({
           templateStyle.backgroundWash
         );
 
+        drawSubjectOutline();
+
         context.save();
         context.globalAlpha = 0.88;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
@@ -1875,12 +1962,14 @@ async function renderArtwork({
         context.drawImage(featureMosaicCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
       } else {
+        drawSubjectOutline();
         context.save();
         context.globalAlpha = 0.98;
         context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
         context.restore();
       }
     } else {
+      drawSubjectOutline();
       context.save();
       context.globalAlpha = 0.98;
       context.drawImage(subjectCanvas, portraitX, portraitY, portraitWidth, portraitHeight);
